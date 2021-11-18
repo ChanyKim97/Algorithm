@@ -1,2 +1,2 @@
 # Algorithm
-Baekjoon&amp;rogrammers
+Baekjoon&Programmers
