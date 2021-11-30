@@ -41,14 +41,11 @@ class Node:
 
         return self
 
-    def get_size(self) -> int:
-        return len(self.keys)
-
     def is_empty(self) -> bool:
         return len(self.keys) == 0
 
-    def is_full(self) -> bool:
-        return len(self.keys) == self.order - 1
+    def is_root(self) -> bool:
+        return self.parent is None
 
     def is_nearly_underflowed(self) -> bool:
         return len(self.keys) <= floor(self.order / 2)
@@ -56,8 +53,6 @@ class Node:
     def is_underflowed(self) -> bool:
         return len(self.keys) <= floor(self.order / 2) - 1
 
-    def is_root(self) -> bool:
-        return self.parent is None
 
 
 class LeafNode(Node):
@@ -116,13 +111,6 @@ class B_PLUS_TREE(object):
         self.order: int = order
         self.root: Node = LeafNode(order)
 
-    @staticmethod
-    def _find(node: Node, key):
-        for i, item in enumerate(node.keys):
-            if key < item:
-                return node.values[i], i
-            elif i + 1 == len(node.keys):
-                return node.values[i + 1], i + 1
 
     def find(self, key):
         if key not in B_PLUS_TREE.all_data(self):
@@ -140,38 +128,14 @@ class B_PLUS_TREE(object):
         print()
         return None
 
-    def all_data(self):
-        node = self.get_leftmost_leaf()
-        list_ = []
-        if not node:
-            return None
+    @staticmethod
+    def _find(node: Node, key):
+        for i, item in enumerate(node.keys):
+            if key < item:
+                return node.values[i], i
+            elif i + 1 == len(node.keys):
+                return node.values[i + 1], i + 1
 
-        while node:
-            for node_data in node.values:
-                list_.append(node_data[0])
-
-            node = node.next_leaf
-
-        return list_
-
-    def _merge_up(parent: Node, child: Node, index):
-        parent.values.pop(index)
-        pivot = child.keys[0]
-
-        for c in child.values:
-            if isinstance(c, Node):
-                c.parent = parent
-
-        for i, item in enumerate(parent.keys):
-            if pivot < item:
-                parent.keys = parent.keys[:i] + [pivot] + parent.keys[i:]
-                parent.values = parent.values[:i] + child.values + parent.values[i:]
-                break
-
-            elif i + 1 == len(parent.keys):
-                parent.keys += [pivot]
-                parent.values += child.values
-                break
 
     def insert(self, key):
         value = key
@@ -193,6 +157,25 @@ class B_PLUS_TREE(object):
                 node = node.split()
                 self.root = node
 
+    def _merge_up(parent: Node, child: Node, index):
+        parent.values.pop(index)
+        pivot = child.keys[0]
+
+        for c in child.values:
+            if isinstance(c, Node):
+                c.parent = parent
+
+        for i, item in enumerate(parent.keys):
+            if pivot < item:
+                parent.keys = parent.keys[:i] + [pivot] + parent.keys[i:]
+                parent.values = parent.values[:i] + child.values + parent.values[i:]
+                break
+
+            elif i + 1 == len(parent.keys):
+                parent.keys += [pivot]
+                parent.values += child.values
+                break
+
 
     def delete(self, key):
         node = self.root
@@ -204,14 +187,13 @@ class B_PLUS_TREE(object):
             return False
 
         index = node.keys.index(key)
-        node.values[index].pop()  # Remove the last inserted data.
+        node.values[index].pop()
 
         if len(node.values[index]) == 0:
-            node.values.pop(index)  # Remove the list element.
+            node.values.pop(index)
             node.keys.pop(index)
 
             while node.is_underflowed() and not node.is_root():
-                # Borrow attempt:
                 prev_sibling = B_PLUS_TREE.get_prev_sibling(node)
                 next_sibling = B_PLUS_TREE.get_next_sibling(node)
                 jnk, parent_index = self._find(node.parent, key)
@@ -220,16 +202,27 @@ class B_PLUS_TREE(object):
                     self._borrow_left(node, prev_sibling, parent_index)
                 elif next_sibling and not next_sibling.is_nearly_underflowed():
                     self._borrow_right(node, next_sibling, parent_index)
-                elif prev_sibling and prev_sibling.is_nearly_underflowed():
-                    self._merge_on_delete(prev_sibling, node)
-                elif next_sibling and next_sibling.is_nearly_underflowed():
-                    self._merge_on_delete(node, next_sibling)
 
                 node = node.parent
 
             if node.is_root() and not isinstance(node, LeafNode) and len(node.values) == 1:
                 self.root = node.values[0]
                 self.root.parent = None
+
+    @staticmethod
+    def get_prev_sibling(node: Node) -> Node:
+        if node.is_root() or not node.keys:
+            return None
+        jnk, index = B_PLUS_TREE._find(node.parent, node.keys[0])
+        return node.parent.values[index - 1] if index - 1 >= 0 else None
+
+    @staticmethod
+    def get_next_sibling(node: Node) -> Node:
+        if node.is_root() or not node.keys:
+            return None
+        jnk, index = B_PLUS_TREE._find(node.parent, node.keys[0])
+
+        return node.parent.values[index + 1] if index + 1 < len(node.parent.values) else None
 
     @staticmethod
     def _borrow_left(node: Node, sibling: Node, parent_index):
@@ -268,63 +261,6 @@ class B_PLUS_TREE(object):
             node.keys.append(parent_key)
             node.values.append(data)
 
-    @staticmethod
-    def _merge_on_delete(l_node: Node, r_node: Node):
-        parent = l_node.parent
-
-        jnk, index = B_PLUS_TREE._find(parent, l_node.keys[0])
-        parent_key = parent.keys.pop(index)
-        parent.values.pop(index)
-        parent.values[index] = l_node
-
-        if isinstance(l_node, LeafNode) and isinstance(r_node, LeafNode):
-            l_node.next_leaf = r_node.next_leaf
-        else:
-            l_node.keys.append(parent_key)  # TODO Verify dis
-            for r_node_child in r_node.values:
-                r_node_child.parent = l_node
-
-        l_node.keys += r_node.keys
-        l_node.values += r_node.values
-
-    @staticmethod
-    def get_prev_sibling(node: Node) -> Node:
-        if node.is_root() or not node.keys:
-            return None
-        jnk, index = B_PLUS_TREE._find(node.parent, node.keys[0])
-        return node.parent.values[index - 1] if index - 1 >= 0 else None
-
-    @staticmethod
-    def get_next_sibling(node: Node) -> Node:
-        if node.is_root() or not node.keys:
-            return None
-        jnk, index = B_PLUS_TREE._find(node.parent, node.keys[0])
-
-        return node.parent.values[index + 1] if index + 1 < len(node.parent.values) else None
-
-    def get_leftmost_leaf(self):
-        if not self.root:
-            return None
-
-        node = self.root
-        while not isinstance(node, LeafNode):
-            node = node.values[0]
-
-        return node
-
-    def get_rightmost_leaf(self):
-        if not self.root:
-            return None
-
-        node = self.root
-        while not isinstance(node, LeafNode):
-            node = node.values[-1]
-
-    @staticmethod
-    def intersperse(lst, item):
-        result = [item] * (len(lst) * 2)
-        result[0::2] = lst
-        return result
 
     def print_root(self):
         l = "["
@@ -333,7 +269,8 @@ class B_PLUS_TREE(object):
         l = l[:-1] + "]"
         print(l)
         pass
-    
+
+
     def print_tree(self):
         if self.root.is_empty():
             print('The B+ Tree is empty!')
@@ -359,6 +296,14 @@ class B_PLUS_TREE(object):
             else:
                 print(node.keys, end=',')
 
+
+    @staticmethod
+    def intersperse(lst, item):
+        result = [item] * (len(lst) * 2)
+        result[0::2] = lst
+        return result
+
+
     def find_range(self, k_from, k_to):
         node = self.get_leftmost_leaf()
         if not node:
@@ -369,6 +314,30 @@ class B_PLUS_TREE(object):
                     print('{}'.format(', '.join(map(str, node_data))), end=',')
 
             node = node.next_leaf
+
+    def get_leftmost_leaf(self):
+        if not self.root:
+            return None
+
+        node = self.root
+        while not isinstance(node, LeafNode):
+            node = node.values[0]
+
+        return node
+
+    def all_data(self):
+        node = self.get_leftmost_leaf()
+        list_ = []
+        if not node:
+            return None
+
+        while node:
+            for node_data in node.values:
+                list_.append(node_data[0])
+
+            node = node.next_leaf
+
+        return list_
 
 
 def main():
