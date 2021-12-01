@@ -1,3 +1,4 @@
+#pypy3로 제출해야함 python3 개느림
 import sys
 
 def check(x):
