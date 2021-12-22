@@ -1,6 +1,6 @@
 a = input().split('-')
 
-# 조합으로 잘못생각함 
+# 조합으로 잘못생각함
 # minus_cnt = len(a) - 1
 #
 # n = []
@@ -23,3 +23,22 @@ a = input().split('-')
 #         sum += i
 #
 # print(sum)
+
+sum = 0
+cnt = 0
+
+for i in a:
+    tmp = 0
+    if "+" in i:
+        for j in i.split('+'):
+            tmp += int(j)
+    else:
+        tmp += int(i)
+
+    if cnt == 0:
+        sum+= tmp
+        cnt+=1
+    else:
+        sum -= tmp
+
+print(sum)
